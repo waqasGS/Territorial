@@ -4,23 +4,35 @@ using UnityEngine.EventSystems;
 
 public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 {
+    [Header("UI References")]
     public RawImage rawImage;
-    public Color backgroundColor = Color.white;
+    public Image brushPreviewImage;
+    public Toggle[] terrainToggles;
+    public Toggle toggleCircle, toggleSquare, toggleTriangle, toggleRandom;
+    public Slider brushSizeSlider;
 
+    [Header("Settings")]
+    public Color backgroundColor = Color.white;
     public bool isErasing = false;
+    public TerrainType[] terrainTypes;
+
+    [Header("Brush Textures")]
+    public Texture2D textureCircle;
+    public Texture2D textureSquare;
+    public Texture2D textureTriangle;
+    public Texture2D textureRandom;
+
+    public enum BrushShape { Circle, Square, Triangle, Random }
+    public BrushShape brushShape = BrushShape.Circle;
 
     private Texture2D texture;
     private int textureSize = 512;
-    public int BrushSize = 5;
-
-    public TerrainType[] terrainTypes;
-
-
-    public int ColorIndex;
-    public Color paintColor = Color.red;
+    private int brushSize = 10;
+    private Color paintColor = Color.red;
 
     void Start()
     {
+        // Initialize texture
         texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Point;
         texture.wrapMode = TextureWrapMode.Clamp;
@@ -37,27 +49,90 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
                 int dx = x - centerX;
                 int dy = y - centerY;
                 bool insideCircle = dx * dx + dy * dy <= sqrRadius;
-
                 texture.SetPixel(x, y, insideCircle ? backgroundColor : Color.clear);
             }
         }
 
         texture.Apply();
         rawImage.texture = texture;
+
+        // Assign brush shape toggles
+        toggleCircle.onValueChanged.AddListener(isOn =>
+        {
+            if (isOn) SetBrushShape(BrushShape.Circle, textureCircle);
+        });
+
+        toggleSquare.onValueChanged.AddListener(isOn =>
+        {
+            if (isOn) SetBrushShape(BrushShape.Square, textureSquare);
+        });
+
+        toggleTriangle.onValueChanged.AddListener(isOn =>
+        {
+            if (isOn) SetBrushShape(BrushShape.Triangle, textureTriangle);
+        });
+
+        toggleRandom.onValueChanged.AddListener(isOn =>
+        {
+            if (isOn) SetBrushShape(BrushShape.Random, textureRandom);
+        });
+
+        // Assign terrain color toggles
+        for (int i = 0; i < terrainToggles.Length; i++)
+        {
+            int index = i;
+            terrainToggles[i].onValueChanged.AddListener(isOn =>
+            {
+                if (isOn)
+                {
+                    paintColor = terrainTypes[index].color;
+                }
+            });
+        }
+
+        // Brush size slider
+        brushSizeSlider.minValue = 1;
+        brushSizeSlider.maxValue = 100;
+        brushSizeSlider.value = brushSize;
+        brushSizeSlider.onValueChanged.AddListener(val =>
+        {
+            brushSize = Mathf.RoundToInt(val);
+        });
+
+        // Set initial preview brush
+        SetBrushShape(BrushShape.Circle, textureCircle);
     }
 
-
-
-
-    public void OnPointerDown(PointerEventData eventData)
+    void Update()
     {
-        Paint(eventData);
+        Vector2 mousePos = Input.mousePosition;
+
+        // Position brush preview
+        brushPreviewImage.transform.position = mousePos;
+        brushPreviewImage.rectTransform.sizeDelta = new Vector2(brushSize, brushSize);
+
+        // Show only if inside paint area
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            rawImage.rectTransform,
+            mousePos,
+            null,
+            out Vector2 localPos
+        );
+
+        Rect rect = rawImage.rectTransform.rect;
+        brushPreviewImage.gameObject.SetActive(rect.Contains(localPos));
     }
 
-    public void OnDrag(PointerEventData eventData)
+    void SetBrushShape(BrushShape shape, Texture2D tex)
     {
-        Paint(eventData);
+        brushShape = shape;
+        brushPreviewImage.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
     }
+
+    public void ToggleErase() => isErasing = !isErasing;
+
+    public void OnPointerDown(PointerEventData eventData) => Paint(eventData);
+    public void OnDrag(PointerEventData eventData) => Paint(eventData);
 
     void Paint(PointerEventData eventData)
     {
@@ -75,34 +150,42 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         int centerX = Mathf.FloorToInt(uvX * texture.width);
         int centerY = Mathf.FloorToInt(uvY * texture.height);
 
-        int halfBrush = Mathf.Max(1, BrushSize / 2);
-
-        Color c = terrainTypes[ColorIndex].color;
-        c.a = 1f;
-        paintColor = c;
-
         Color drawColor = isErasing ? backgroundColor : paintColor;
 
-        for (int y = -halfBrush; y <= halfBrush; y++)
+        Texture2D selectedBrush = brushShape switch
         {
-            for (int x = -halfBrush; x <= halfBrush; x++)
-            {
-                int px = centerX + x;
-                int py = centerY + y;
+            BrushShape.Circle => textureCircle,
+            BrushShape.Square => textureSquare,
+            BrushShape.Triangle => textureTriangle,
+            BrushShape.Random => textureRandom,
+            _ => textureCircle
+        };
 
-                if (px >= 0 && px < texture.width && py >= 0 && py < texture.height)
-                {
-                    texture.SetPixel(px, py, drawColor);
-                }
-            }
-        }
-
+        PaintWithBrushTexture(centerX, centerY, selectedBrush, drawColor);
         texture.Apply();
     }
 
-
-    public void ToggleErase()
+    void PaintWithBrushTexture(int cx, int cy, Texture2D brushTexture, Color color)
     {
-        isErasing = !isErasing;
+        int brushWidth = brushTexture.width;
+        int brushHeight = brushTexture.height;
+
+        for (int y = 0; y < brushHeight; y++)
+        {
+            for (int x = 0; x < brushWidth; x++)
+            {
+                Color mask = brushTexture.GetPixel(x, y);
+                if (mask.a > 0.1f)
+                {
+                    int px = cx + Mathf.RoundToInt(x * brushSize / (float)brushWidth) - brushSize / 2;
+                    int py = cy + Mathf.RoundToInt(y * brushSize / (float)brushHeight) - brushSize / 2;
+
+                    if (px >= 0 && px < texture.width && py >= 0 && py < texture.height)
+                    {
+                        texture.SetPixel(px, py, color);
+                    }
+                }
+            }
+        }
     }
 }
