@@ -140,7 +140,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &342486636
 RectTransform:
   m_ObjectHideFlags: 0
@@ -421,9 +421,31 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   rawImage: {fileID: 707948112}
   backgroundColor: {r: 1, g: 1, b: 1, a: 1}
-  paintColor: {r: 1, g: 0, b: 0, a: 1}
   isErasing: 0
   BrushSize: 5
+  terrainTypes:
+  - name: Land
+    color: {r: 0, g: 1, b: 0, a: 0}
+    moveSpeed: 1
+    expandSpeed: 1
+    populationSpeed: 1
+  - name: Ocean
+    color: {r: 1, g: 1, b: 0, a: 1}
+    moveSpeed: 0.2
+    expandSpeed: 0.1
+    populationSpeed: 0
+  - name: City
+    color: {r: 1, g: 1, b: 0, a: 1}
+    moveSpeed: 1.5
+    expandSpeed: 2
+    populationSpeed: 3
+  - name: Mountain
+    color: {r: 1, g: 0, b: 0, a: 1}
+    moveSpeed: 0.3
+    expandSpeed: 0.5
+    populationSpeed: 0.2
+  ColorIndex: 0
+  paintColor: {r: 1, g: 0, b: 0, a: 1}
 --- !u!1 &1148777374
 GameObject:
   m_ObjectHideFlags: 0
@@ -879,7 +901,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2129155181
 RectTransform:
   m_ObjectHideFlags: 0

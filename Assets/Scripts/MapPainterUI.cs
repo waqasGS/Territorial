@@ -5,14 +5,19 @@ using UnityEngine.EventSystems;
 public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 {
     public RawImage rawImage;
-    public Color backgroundColor = Color.white; 
-    public Color paintColor = Color.red;
+    public Color backgroundColor = Color.white;
 
-    public bool isErasing = false;  // Toggle this in UI to switch between painting and erasing
+    public bool isErasing = false;
 
     private Texture2D texture;
     private int textureSize = 512;
     public int BrushSize = 5;
+
+    public TerrainType[] terrainTypes;
+
+
+    public int ColorIndex;
+    public Color paintColor = Color.red;
 
     void Start()
     {
@@ -20,17 +25,29 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         texture.filterMode = FilterMode.Point;
         texture.wrapMode = TextureWrapMode.Clamp;
 
+        int centerX = textureSize / 2;
+        int centerY = textureSize / 2;
+        int radius = textureSize / 2;
+        int sqrRadius = radius * radius;
+
         for (int y = 0; y < textureSize; y++)
         {
             for (int x = 0; x < textureSize; x++)
             {
-                texture.SetPixel(x, y, backgroundColor);  // Use background color
+                int dx = x - centerX;
+                int dy = y - centerY;
+                bool insideCircle = dx * dx + dy * dy <= sqrRadius;
+
+                texture.SetPixel(x, y, insideCircle ? backgroundColor : Color.clear);
             }
         }
-        texture.Apply();
 
+        texture.Apply();
         rawImage.texture = texture;
     }
+
+
+
 
     public void OnPointerDown(PointerEventData eventData)
     {
@@ -44,7 +61,12 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 
     void Paint(PointerEventData eventData)
     {
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(rawImage.rectTransform, eventData.position, eventData.pressEventCamera, out Vector2 localPos);
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            rawImage.rectTransform,
+            eventData.position,
+            eventData.pressEventCamera,
+            out Vector2 localPos
+        );
 
         Rect rect = rawImage.rectTransform.rect;
         float uvX = (localPos.x - rect.x) / rect.width;
@@ -54,6 +76,11 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         int centerY = Mathf.FloorToInt(uvY * texture.height);
 
         int halfBrush = Mathf.Max(1, BrushSize / 2);
+
+        Color c = terrainTypes[ColorIndex].color;
+        c.a = 1f;
+        paintColor = c;
+
         Color drawColor = isErasing ? backgroundColor : paintColor;
 
         for (int y = -halfBrush; y <= halfBrush; y++)
@@ -73,7 +100,7 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         texture.Apply();
     }
 
-    // Optional: Toggle erase mode from a UI button
+
     public void ToggleErase()
     {
         isErasing = !isErasing;
