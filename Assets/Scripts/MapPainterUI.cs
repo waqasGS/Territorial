@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -31,56 +34,54 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
     private int textureSize = 512;
     private int brushSize = 10;
     private Color paintColor = Color.red;
+    private MapData currentMapData;
 
     void Start()
     {
-        // Initialize paint texture
         texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Point;
         texture.wrapMode = TextureWrapMode.Clamp;
 
-        int centerX = textureSize / 2;
-        int centerY = textureSize / 2;
-        int radius = textureSize / 2;
-        int sqrRadius = radius * radius;
+        currentMapData = new MapData
+        {
+            width = textureSize,
+            height = textureSize,
+            data = new PixelData[textureSize * textureSize]
+        };
+
+        for (int i = 0; i < currentMapData.data.Length; i++)
+        {
+            currentMapData.data[i] = new PixelData();
+        }
+
+        Vector2 center = new Vector2(textureSize / 2f, textureSize / 2f);
+        float radius = textureSize / 2f;
 
         for (int y = 0; y < textureSize; y++)
         {
             for (int x = 0; x < textureSize; x++)
             {
-                int dx = x - centerX;
-                int dy = y - centerY;
-                bool insideCircle = dx * dx + dy * dy <= sqrRadius;
-                texture.SetPixel(x, y, insideCircle ? backgroundColor : Color.clear);
+                Vector2 pos = new Vector2(x, y);
+                float dist = Vector2.Distance(pos, center);
+
+                if (dist <= radius)
+                    texture.SetPixel(x, y, backgroundColor);
+                else
+                    texture.SetPixel(x, y, new Color(0, 0, 0, 0)); // transparent outside
             }
         }
 
         texture.Apply();
         rawImage.texture = texture;
 
-        // Set default brush shape and color
         SetBrushShape(BrushShape.Circle, textureCircle);
         brushPreviewImage.color = paintColor;
 
-        // Brush toggles
-        toggleCircle.onValueChanged.AddListener(isOn =>
-        {
-            if (isOn) SetBrushShape(BrushShape.Circle, textureCircle);
-        });
-        toggleSquare.onValueChanged.AddListener(isOn =>
-        {
-            if (isOn) SetBrushShape(BrushShape.Square, textureSquare);
-        });
-        toggleTriangle.onValueChanged.AddListener(isOn =>
-        {
-            if (isOn) SetBrushShape(BrushShape.Triangle, textureTriangle);
-        });
-        toggleRandom.onValueChanged.AddListener(isOn =>
-        {
-            if (isOn) SetBrushShape(BrushShape.Random, textureRandom);
-        });
+        toggleCircle.onValueChanged.AddListener(isOn => { if (isOn) SetBrushShape(BrushShape.Circle, textureCircle); });
+        toggleSquare.onValueChanged.AddListener(isOn => { if (isOn) SetBrushShape(BrushShape.Square, textureSquare); });
+        toggleTriangle.onValueChanged.AddListener(isOn => { if (isOn) SetBrushShape(BrushShape.Triangle, textureTriangle); });
+        toggleRandom.onValueChanged.AddListener(isOn => { if (isOn) SetBrushShape(BrushShape.Random, textureRandom); });
 
-        // Terrain color selection
         for (int i = 0; i < terrainToggles.Length; i++)
         {
             int index = i;
@@ -95,7 +96,6 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
             });
         }
 
-        // Brush size slider
         brushSizeSlider.minValue = 1f;
         brushSizeSlider.maxValue = 20f;
         brushSizeSlider.value = brushSize;
@@ -105,7 +105,6 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
             UpdateBrushPreviewSize();
         });
 
-        // Erase toggle
         eraseToggle.onValueChanged.AddListener(isOn =>
         {
             isErasing = isOn;
@@ -118,14 +117,7 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
     void Update()
     {
         Vector2 mousePos = Input.mousePosition;
-
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            rawImage.rectTransform,
-            mousePos,
-            canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera,
-            out Vector2 localPos
-        );
-
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(rawImage.rectTransform, mousePos, canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera, out Vector2 localPos);
         Rect rect = rawImage.rectTransform.rect;
 
         if (rect.Contains(localPos))
@@ -143,11 +135,7 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
     {
         float ratioX = rawImage.rectTransform.rect.width / texture.width;
         float ratioY = rawImage.rectTransform.rect.height / texture.height;
-
-        brushPreviewImage.rectTransform.sizeDelta = new Vector2(
-            brushSize * ratioX,
-            brushSize * ratioY
-        );
+        brushPreviewImage.rectTransform.sizeDelta = new Vector2(brushSize * ratioX, brushSize * ratioY);
     }
 
     void SetBrushShape(BrushShape shape, Texture2D tex)
@@ -156,28 +144,18 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         brushPreviewImage.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
     }
 
-    public void ToggleErase() => isErasing = !isErasing;
-
     public void OnPointerDown(PointerEventData eventData) => Paint(eventData);
     public void OnDrag(PointerEventData eventData) => Paint(eventData);
 
     void Paint(PointerEventData eventData)
     {
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            rawImage.rectTransform,
-            eventData.position,
-            eventData.pressEventCamera,
-            out Vector2 localPos
-        );
-
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(rawImage.rectTransform, eventData.position, eventData.pressEventCamera, out Vector2 localPos);
         Rect rect = rawImage.rectTransform.rect;
 
         float uvX = (localPos.x - rect.x) / rect.width;
         float uvY = (localPos.y - rect.y) / rect.height;
-
         int centerX = Mathf.FloorToInt(uvX * texture.width);
         int centerY = Mathf.FloorToInt(uvY * texture.height);
-
         Color drawColor = isErasing ? backgroundColor : paintColor;
 
         Texture2D selectedBrush = brushShape switch
@@ -215,5 +193,69 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
                 }
             }
         }
+    }
+
+    public void SaveMap()
+    {
+        for (int y = 0; y < texture.height; y++)
+        {
+            for (int x = 0; x < texture.width; x++)
+            {
+                Color pixelColor = texture.GetPixel(x, y);
+                int index = y * texture.width + x;
+
+                var terrain = terrainTypes.FirstOrDefault(t =>
+                    Mathf.Approximately(t.color.r, pixelColor.r) &&
+                    Mathf.Approximately(t.color.g, pixelColor.g) &&
+                    Mathf.Approximately(t.color.b, pixelColor.b) &&
+                    Mathf.Approximately(t.color.a, pixelColor.a));
+
+                if (terrain == null)
+                {
+                    Debug.LogWarning($"Unmatched color at ({x}, {y}): {pixelColor}");
+                }
+
+                currentMapData.data[index].moveSpeed = terrain?.moveSpeed ?? 0f;
+                currentMapData.data[index].expandSpeed = terrain?.expandSpeed ?? 0f;
+                currentMapData.data[index].populationSpeed = terrain?.populationSpeed ?? 0f;
+            }
+        }
+
+        string json = JsonUtility.ToJson(currentMapData, true);
+        string path = Application.dataPath + "/Resources/map.json";
+        File.WriteAllText(path, json);
+        Debug.Log("Map saved to: " + path);
+    }
+
+    public void LoadMap()
+    {
+        string path = Application.dataPath + "/Resources/map.json";
+        if (!File.Exists(path))
+        {
+            Debug.LogWarning("Map file not found: " + path);
+            return;
+        }
+
+        string json = File.ReadAllText(path);
+        currentMapData = JsonUtility.FromJson<MapData>(json);
+
+        for (int y = 0; y < currentMapData.height; y++)
+        {
+            for (int x = 0; x < currentMapData.width; x++)
+            {
+                int index = y * currentMapData.width + x;
+                PixelData data = currentMapData.data[index];
+
+                Color matchedColor = terrainTypes.FirstOrDefault(t =>
+                    Mathf.Approximately(t.moveSpeed, data.moveSpeed) &&
+                    Mathf.Approximately(t.expandSpeed, data.expandSpeed) &&
+                    Mathf.Approximately(t.populationSpeed, data.populationSpeed))?.color ?? backgroundColor;
+
+                texture.SetPixel(x, y, matchedColor);
+            }
+        }
+
+        texture.Apply();
+        Debug.Log("Map loaded from: " + path);
     }
 }
