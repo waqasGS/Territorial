@@ -6,10 +6,12 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 {
     [Header("UI References")]
     public RawImage rawImage;
+    public Image brushPreviewImage;
     public Toggle[] terrainToggles;
     public Toggle toggleCircle, toggleSquare, toggleTriangle, toggleRandom;
     public Slider brushSizeSlider;
     public Toggle eraseToggle;
+    public Canvas canvas;
 
     [Header("Settings")]
     public Color backgroundColor = Color.white;
@@ -32,7 +34,7 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 
     void Start()
     {
-        // Initialize texture
+        // Initialize paint texture
         texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Point;
         texture.wrapMode = TextureWrapMode.Clamp;
@@ -56,28 +58,29 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         texture.Apply();
         rawImage.texture = texture;
 
-        // Assign brush shape toggles
+        // Set default brush shape and color
+        SetBrushShape(BrushShape.Circle, textureCircle);
+        brushPreviewImage.color = paintColor;
+
+        // Brush toggles
         toggleCircle.onValueChanged.AddListener(isOn =>
         {
             if (isOn) SetBrushShape(BrushShape.Circle, textureCircle);
         });
-
         toggleSquare.onValueChanged.AddListener(isOn =>
         {
             if (isOn) SetBrushShape(BrushShape.Square, textureSquare);
         });
-
         toggleTriangle.onValueChanged.AddListener(isOn =>
         {
             if (isOn) SetBrushShape(BrushShape.Triangle, textureTriangle);
         });
-
         toggleRandom.onValueChanged.AddListener(isOn =>
         {
             if (isOn) SetBrushShape(BrushShape.Random, textureRandom);
         });
 
-        // Assign terrain color toggles
+        // Terrain color selection
         for (int i = 0; i < terrainToggles.Length; i++)
         {
             int index = i;
@@ -86,50 +89,71 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
                 if (isOn)
                 {
                     paintColor = terrainTypes[index].color;
+                    if (!isErasing)
+                        brushPreviewImage.color = paintColor;
                 }
             });
         }
 
         // Brush size slider
-        brushSizeSlider.minValue = 0.1f;
-        brushSizeSlider.maxValue = 50f;
+        brushSizeSlider.minValue = 1f;
+        brushSizeSlider.maxValue = 20f;
         brushSizeSlider.value = brushSize;
         brushSizeSlider.onValueChanged.AddListener(val =>
         {
             brushSize = Mathf.RoundToInt(val);
+            UpdateBrushPreviewSize();
         });
 
-        // Set initial preview brush
-        SetBrushShape(BrushShape.Circle, textureCircle);
-
-
+        // Erase toggle
         eraseToggle.onValueChanged.AddListener(isOn =>
         {
             isErasing = isOn;
+            brushPreviewImage.color = isOn ? backgroundColor : paintColor;
         });
+
+        UpdateBrushPreviewSize();
     }
 
     void Update()
     {
         Vector2 mousePos = Input.mousePosition;
 
-
-        // Show only if inside paint area
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
             rawImage.rectTransform,
             mousePos,
-            null,
+            canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera,
             out Vector2 localPos
         );
 
         Rect rect = rawImage.rectTransform.rect;
-       // brushPreviewImage.gameObject.SetActive(rect.Contains(localPos));
+
+        if (rect.Contains(localPos))
+        {
+            brushPreviewImage.gameObject.SetActive(true);
+            brushPreviewImage.rectTransform.anchoredPosition = localPos;
+        }
+        else
+        {
+            brushPreviewImage.gameObject.SetActive(false);
+        }
+    }
+
+    void UpdateBrushPreviewSize()
+    {
+        float ratioX = rawImage.rectTransform.rect.width / texture.width;
+        float ratioY = rawImage.rectTransform.rect.height / texture.height;
+
+        brushPreviewImage.rectTransform.sizeDelta = new Vector2(
+            brushSize * ratioX,
+            brushSize * ratioY
+        );
     }
 
     void SetBrushShape(BrushShape shape, Texture2D tex)
     {
         brushShape = shape;
-      //  brushPreviewImage.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+        brushPreviewImage.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
     }
 
     public void ToggleErase() => isErasing = !isErasing;
@@ -147,6 +171,7 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         );
 
         Rect rect = rawImage.rectTransform.rect;
+
         float uvX = (localPos.x - rect.x) / rect.width;
         float uvY = (localPos.y - rect.y) / rect.height;
 
