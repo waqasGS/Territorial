@@ -6,7 +6,6 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 {
     [Header("UI References")]
     public RawImage rawImage;
-    //public Image brushPreviewImage;
     public Toggle[] terrainToggles;
     public Toggle toggleCircle, toggleSquare, toggleTriangle, toggleRandom;
     public Slider brushSizeSlider;
