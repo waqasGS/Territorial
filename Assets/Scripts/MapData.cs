@@ -1,14 +1,5 @@
-using System;
-
-[Serializable]
-public class PixelData
-{
-    public float moveSpeed;
-    public float expandSpeed;
-    public float populationSpeed;
-}
-
-[Serializable]
+// MapData.cs
+[System.Serializable]
 public class MapData
 {
     public int width;
