@@ -6,10 +6,11 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 {
     [Header("UI References")]
     public RawImage rawImage;
-    public Image brushPreviewImage;
+    //public Image brushPreviewImage;
     public Toggle[] terrainToggles;
     public Toggle toggleCircle, toggleSquare, toggleTriangle, toggleRandom;
     public Slider brushSizeSlider;
+    public Toggle eraseToggle;
 
     [Header("Settings")]
     public Color backgroundColor = Color.white;
@@ -91,8 +92,8 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         }
 
         // Brush size slider
-        brushSizeSlider.minValue = 1;
-        brushSizeSlider.maxValue = 100;
+        brushSizeSlider.minValue = 0.1f;
+        brushSizeSlider.maxValue = 50f;
         brushSizeSlider.value = brushSize;
         brushSizeSlider.onValueChanged.AddListener(val =>
         {
@@ -101,15 +102,18 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 
         // Set initial preview brush
         SetBrushShape(BrushShape.Circle, textureCircle);
+
+
+        eraseToggle.onValueChanged.AddListener(isOn =>
+        {
+            isErasing = isOn;
+        });
     }
 
     void Update()
     {
         Vector2 mousePos = Input.mousePosition;
 
-        // Position brush preview
-        brushPreviewImage.transform.position = mousePos;
-        brushPreviewImage.rectTransform.sizeDelta = new Vector2(brushSize, brushSize);
 
         // Show only if inside paint area
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
@@ -120,13 +124,13 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         );
 
         Rect rect = rawImage.rectTransform.rect;
-        brushPreviewImage.gameObject.SetActive(rect.Contains(localPos));
+       // brushPreviewImage.gameObject.SetActive(rect.Contains(localPos));
     }
 
     void SetBrushShape(BrushShape shape, Texture2D tex)
     {
         brushShape = shape;
-        brushPreviewImage.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+      //  brushPreviewImage.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
     }
 
     public void ToggleErase() => isErasing = !isErasing;
