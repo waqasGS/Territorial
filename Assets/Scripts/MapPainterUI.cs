@@ -1,4 +1,4 @@
-// MapPainterUI.cs
+//MapPainterUI.cs
 using System.IO;
 using System.Linq;
 using UnityEngine;
@@ -14,11 +14,11 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
     public Toggle eraseToggle;
     public Canvas canvas;
 
-    [Header("Toggle For  Shapes")]
+    [Header("Toggle For Shapes")]
     public Toggle toggleCircle, toggleSquare, toggleTriangle, toggleRandom;
-    public TileType[] tileTypes;
 
-    [Header("Tile Toggles")]
+    [Header("Tile Types")]
+    public TileType[] tileTypes;
     public Toggle[] tileTypeToggles;
 
     [Header("Brush Textures")]
@@ -32,25 +32,25 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
 
     [Header("Settings")]
     public Color backgroundColor = Color.white;
+
     private Texture2D texture;
     private int textureSize = 512;
     private int brushSize = 10;
-    private Color paintColor = Color.red;
+    private Color paintColor;
     private TileType selectedTileType;
     private Tile[] tiles;
     private bool isErasing = false;
-
-
 
     public string mapName;
 
     void Start()
     {
         paintColor = tileTypes[0].color;
+        selectedTileType = tileTypes[0];
+
         texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Point;
         texture.wrapMode = TextureWrapMode.Clamp;
-
         tiles = new Tile[textureSize * textureSize];
 
         for (int y = 0; y < textureSize; y++)
@@ -59,27 +59,27 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
             {
                 int index = y * textureSize + x;
                 tiles[index] = new Tile(new Vector2Int(x, y), null);
-
-                // Fill entire square with background color
                 texture.SetPixel(x, y, backgroundColor);
             }
         }
 
-
         texture.Apply();
         rawImage.texture = texture;
+
+        // Set initial brush
         SetBrushShape(BrushShape.Circle, textureCircle);
 
-        // Brush shape listeners
+        // Brush shape toggles
         toggleCircle.onValueChanged.AddListener(isOn => { if (isOn) SetBrushShape(BrushShape.Circle, textureCircle); });
         toggleSquare.onValueChanged.AddListener(isOn => { if (isOn) SetBrushShape(BrushShape.Square, textureSquare); });
         toggleTriangle.onValueChanged.AddListener(isOn => { if (isOn) SetBrushShape(BrushShape.Triangle, textureTriangle); });
         toggleRandom.onValueChanged.AddListener(isOn => { if (isOn) SetBrushShape(BrushShape.Random, textureRandom); });
 
-        // Tile type listeners
+        // Tile type toggles
         for (int i = 0; i < tileTypeToggles.Length; i++)
         {
             int index = i;
+            tileTypeToggles[i].GetComponentInChildren<Text>().text = tileTypes[i].name;
             tileTypeToggles[i].onValueChanged.AddListener(isOn =>
             {
                 if (isOn)
@@ -92,7 +92,6 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
             });
         }
 
-        // Brush size
         brushSizeSlider.minValue = 1;
         brushSizeSlider.maxValue = 20;
         brushSizeSlider.value = brushSize;
@@ -186,9 +185,7 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
                     {
                         int index = py * texture.width + px;
                         texture.SetPixel(px, py, color);
-
-                        var type = isErasing ? null : selectedTileType;
-                        tiles[index].ApplyTileType(type);
+                        tiles[index].ApplyTileType(isErasing ? null : selectedTileType);
                     }
                 }
             }
@@ -201,21 +198,37 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         {
             width = texture.width,
             height = texture.height,
-            data = tiles.Select(t => new PixelData
+            data = tiles.Select(t =>
             {
-                moveSpeed = t.moveSpeed,
-                expandSpeed = t.expandSpeed,
-                populationSpeed = t.populationSpeed
+                int index = -1;
+                if (t.tileType != null)
+                {
+                    for (int i = 0; i < tileTypes.Length; i++)
+                    {
+                        if (tileTypes[i] == t.tileType)
+                        {
+                            index = i;
+                            break;
+                        }
+                    }
+                }
+
+                return new PixelData
+                {
+                    tileTypeIndex = index,
+                    moveSpeed = t.moveSpeed,
+                    expandSpeed = t.expandSpeed,
+                    populationSpeed = t.populationSpeed
+                };
             }).ToArray()
         };
 
-        string json = JsonUtility.ToJson(mapData, true);
-        string path = Application.dataPath + "/Resources/"+ mapName +".json";
-        File.WriteAllText(path, json);
+        string path = Application.dataPath + "/Resources/" + mapName + ".json";
+        File.WriteAllText(path, JsonUtility.ToJson(mapData, true));
         Debug.Log("Map saved to: " + path);
     }
 
-    public void LoadMap() 
+    public void LoadMap()
     {
         string path = Application.dataPath + "/Resources/" + mapName + ".json";
         if (!File.Exists(path))
@@ -227,68 +240,59 @@ public class MapPainterUI : MonoBehaviour, IPointerDownHandler, IDragHandler
         string json = File.ReadAllText(path);
         MapData mapData = JsonUtility.FromJson<MapData>(json);
 
+        textureSize = mapData.width;
+        texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Point;
+        texture.wrapMode = TextureWrapMode.Clamp;
+        tiles = new Tile[textureSize * textureSize];
+
         for (int y = 0; y < mapData.height; y++)
         {
             for (int x = 0; x < mapData.width; x++)
             {
                 int index = y * mapData.width + x;
                 PixelData data = mapData.data[index];
-                tiles[index] = new Tile(new Vector2Int(x, y), null);
+                TileType matchedType = (data.tileTypeIndex >= 0 && data.tileTypeIndex < tileTypes.Length)
+                    ? tileTypes[data.tileTypeIndex]
+                    : null;
+
+                tiles[index] = new Tile(new Vector2Int(x, y), matchedType);
                 tiles[index].moveSpeed = data.moveSpeed;
                 tiles[index].expandSpeed = data.expandSpeed;
                 tiles[index].populationSpeed = data.populationSpeed;
 
-                Color color = tileTypes.FirstOrDefault(t =>
-                    Mathf.Approximately(t.moveSpeed, data.moveSpeed) &&
-                    Mathf.Approximately(t.expandSpeed, data.expandSpeed) &&
-                    Mathf.Approximately(t.populationSpeed, data.populationSpeed))?.color ?? backgroundColor;
-
+                Color color = matchedType != null ? matchedType.color : backgroundColor;
                 texture.SetPixel(x, y, color);
             }
         }
 
         texture.Apply();
+        rawImage.texture = texture;
         Debug.Log("Map loaded from: " + path);
     }
 
     public void CreateNewMap(int size, string mapName, TileType defaultTile)
     {
-        textureSize = Mathf.Clamp(size, 500, 512); // set your min/max
-        texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
+        texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Point;
         texture.wrapMode = TextureWrapMode.Clamp;
 
-        tiles = new Tile[textureSize * textureSize];
+        tiles = new Tile[size * size];
 
-        for (int y = 0; y < textureSize; y++)
+        for (int y = 0; y < size; y++)
         {
-            for (int x = 0; x < textureSize; x++)
+            for (int x = 0; x < size; x++)
             {
-                int index = y * textureSize + x;
+                int index = y * size + x;
                 tiles[index] = new Tile(new Vector2Int(x, y), defaultTile);
-
-                float dx = x - textureSize / 2f;
-                float dy = y - textureSize / 2f;
-                float distance = Mathf.Sqrt(dx * dx + dy * dy);
-
-                if (distance <= textureSize / 2f)
-                {
-                    texture.SetPixel(x, y, defaultTile != null ? defaultTile.color : backgroundColor);
-                }
-                else
-                {
-                    texture.SetPixel(x, y, new Color(0, 0, 0, 0)); // transparent
-                }
+                texture.SetPixel(x, y, defaultTile != null ? defaultTile.color : backgroundColor);
             }
         }
 
         texture.Apply();
         rawImage.texture = texture;
 
-        // Optional: save name if needed
-        Debug.Log("New map created: " + mapName + " Size: " + textureSize + "x" + textureSize);
-
         this.mapName = mapName;
+        Debug.Log("New map created: " + mapName + " Size: " + size + "x" + size);
     }
-
 }
